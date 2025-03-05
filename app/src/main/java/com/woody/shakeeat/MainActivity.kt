@@ -1,38 +1,45 @@
 package com.woody.shakeeat
 
+import android.Manifest
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ReportFragment.Companion.reportFragment
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MarkerOptions
-
-import android.Manifest
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import androidx.appcompat.app.AlertDialog
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.CircularBounds
+import com.google.android.libraries.places.api.model.PhotoMetadata
 import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.libraries.places.api.net.SearchNearbyRequest
 
-class MainActivity : AppCompatActivity(), OnMapReadyCallback {
+class MainActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMyLocationButtonClickListener, GoogleMap.OnMyLocationClickListener {
     private var permissionDenied = false
-    private var mMap: GoogleMap? = null
+    private lateinit var mMap: GoogleMap
     var myLocationListener: LocationListener? = null
+    val recyclerView by lazy { findViewById<RecyclerView>(R.id.list) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(com.woody.shakeeat.R.layout.activity_main)
+        setContentView(R.layout.activity_main)
+
+        val gridLayoutManager = GridLayoutManager(this, 3) // 2는 열의 수를 나타냅니다
+        recyclerView.layoutManager = gridLayoutManager
 
         Places.initialize(applicationContext, "AIzaSyAKA6asYYNg8YnUmOv_xehPdvsuis86TvM")
         placesClient = Places.createClient(this)
@@ -48,8 +55,22 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     // NULL이 아닌 GoogleMap 객체를 파라미터로 제공해 줄 수 있을 때 호출
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
-
+        mMap.setOnMyLocationButtonClickListener(this)
+        mMap.setOnMyLocationClickListener(this)
         enableMyLocation()
+    }
+
+    private fun displayPlaceNames(names: List<String>, metadatas: List<MutableList<PhotoMetadata>>) {
+        val adapter = MainAdapter(this, names.toMutableList(), metadatas.toMutableList())
+        recyclerView.adapter = adapter
+    }
+
+    override fun onMyLocationClick(p0: Location) {
+        setMyLocation(p0)
+    }
+
+    override fun onMyLocationButtonClick(): Boolean {
+        return false
     }
 
     private fun enableMyLocation() {
@@ -175,7 +196,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     // Define a list of fields to include in the response for each returned place.
-    val placeFields = listOf(Place.Field.ID, Place.Field.NAME)
+    val placeFields = listOf(Place.Field.ID, Place.Field.NAME, Place.Field.PHOTO_METADATAS)
 
     // Define the search area as a 1000 meter diameter circle in New York, NY.
     val center = LatLng(40.7580, -73.9855)
@@ -201,6 +222,10 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             placesClient.searchNearby(searchNearbyRequest)
                 .addOnSuccessListener { response ->
                     val places = response.places
+                    val placeNames = places.mapNotNull { it.name }
+                    val metadatas = places.mapNotNull { it.photoMetadatas }
+
+                    displayPlaceNames(placeNames, metadatas)
                 }
                 .addOnFailureListener { exception ->
                     // Handle any errors here
